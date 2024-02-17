@@ -1,26 +1,56 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.RegularExpressions;
 using BepInEx;
 using HarmonyLib;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using UnityEngine.UIElements;
 
 namespace KF3.TextHook
 {
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
     public class Kf3TextHookPlugin : BaseUnityPlugin
     {
-        private int waitFrames = -1;
+        [DllImport("kernel32.dll")]
+        static extern IntPtr GlobalAlloc(uint uFlags, UIntPtr dwBytes);
+        
+        [DllImport("kernel32.dll")]
+        static extern IntPtr GlobalLock(IntPtr hMem);
+        
+        [DllImport("kernel32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool GlobalUnlock(IntPtr hMem);
+        
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool OpenClipboard(IntPtr hWndNewOwner);
 
+        [DllImport("user32.dll")]
+        static extern bool EmptyClipboard();
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool CloseClipboard();
+
+        [DllImport("user32.dll")]
+        static extern IntPtr SetClipboardData(uint uFormat, IntPtr hMem);
         private static string Clipboard
         {
-            set => GUIUtility.systemCopyBuffer = Regex.Replace(
-                Regex.Replace(
-                    value, @"\[([^:]*):[^\]]*\]", "$1"
-                ), "<[^>]*>", "");
+            set
+            {
+                var text = Regex.Replace(
+                    Regex.Replace(
+                        value, @"\[([^:]*):[^\]]*\]", "$1"
+                    ), "<[^>]*>", "") + "\0";
+                byte[] strBytes = Encoding.Unicode.GetBytes(text);
+                var globalMem = GlobalAlloc(2, (UIntPtr)strBytes.Length);
+                var buffer = GlobalLock(globalMem);
+                Marshal.Copy(strBytes, 0, buffer, strBytes.Length);
+                GlobalUnlock(globalMem);
+                OpenClipboard(IntPtr.Zero);
+                EmptyClipboard();
+                SetClipboardData(13, globalMem);
+                CloseClipboard();
+            }
         }
 
         private void Awake()
