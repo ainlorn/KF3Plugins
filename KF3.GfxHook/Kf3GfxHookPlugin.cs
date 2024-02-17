@@ -1,5 +1,6 @@
 ﻿using System;
 using BepInEx;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 using SGNFW.Touch;
@@ -11,6 +12,9 @@ namespace KF3.GfxHook
     public class Kf3GfxHookPlugin : BaseUnityPlugin
     {
         private const float RENDER_TEXTURE_SCALE_FACTOR = 2.0f;
+        private static ConfigEntry<int> targetFps;
+        private static ConfigEntry<bool> vsync;
+        private static ConfigEntry<int> qualityLevel;
         private static RenderTexture dummyTexture;
         private static RenderTexture oTexture;
         private int oWidth = 1280;
@@ -18,6 +22,10 @@ namespace KF3.GfxHook
         
         private void Awake()
         {
+            targetFps = Config.Bind("General", "FPSTarget", -1);
+            vsync = Config.Bind("General", "VSync", true);
+            qualityLevel = Config.Bind("General", "QualityLevel", 5);
+            
             try
             {
                 Harmony.CreateAndPatchAll(typeof(Kf3GfxHookPlugin));
@@ -54,9 +62,9 @@ namespace KF3.GfxHook
         [HarmonyPatch(typeof(SceneHome), nameof(SceneHome.OnCreateScene))]
         public static void Hook_SceneHome_OnCreateScene()
         {
-            Application.targetFrameRate = -1;
-            QualitySettings.vSyncCount = 1;
-            QualitySettings.SetQualityLevel(5, true);
+            Application.targetFrameRate = targetFps.Value;
+            QualitySettings.vSyncCount = vsync.Value ? 1 : 0;
+            QualitySettings.SetQualityLevel(qualityLevel.Value, true);
         }
 
         [HarmonyPrefix]
@@ -71,8 +79,11 @@ namespace KF3.GfxHook
         [HarmonyPatch(typeof(RenderTextureChara), nameof(RenderTextureChara.SetupRenderTexture))]
         public static void HookPost_RenderTextureChara_SetupRenderTexture(RenderTextureChara __instance)
         {
-            __instance.dispTexture.rectTransform.sizeDelta = new Vector2(
-                __instance.width / RENDER_TEXTURE_SCALE_FACTOR, __instance.height / RENDER_TEXTURE_SCALE_FACTOR);
+            var scl = 1.0f / RENDER_TEXTURE_SCALE_FACTOR;
+            var newComerObj = GameObject.Find("NewComer");
+            if (newComerObj != null && newComerObj.activeSelf)
+                scl /= RENDER_TEXTURE_SCALE_FACTOR;
+            __instance.dispTexture.transform.localScale = new Vector3(scl, scl, scl);
         }
 
         [HarmonyPrefix]
