@@ -3,7 +3,6 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
-using SGNFW.Touch;
 using UnityEngine;
 
 namespace KF3.GfxHook
@@ -15,6 +14,8 @@ namespace KF3.GfxHook
         private static ConfigEntry<int> targetFps;
         private static ConfigEntry<bool> vsync;
         private static ConfigEntry<int> qualityLevel;
+        private static ConfigEntry<int> antiAliasing;
+        private static ConfigEntry<bool> anisotropicFiltering;
         private static RenderTexture dummyTexture;
         private static RenderTexture oTexture;
         private int oWidth = 1280;
@@ -25,6 +26,8 @@ namespace KF3.GfxHook
             targetFps = Config.Bind("General", "FPSTarget", -1);
             vsync = Config.Bind("General", "VSync", true);
             qualityLevel = Config.Bind("General", "QualityLevel", 5);
+            antiAliasing = Config.Bind("General", "AntiAliasing", 8);
+            anisotropicFiltering = Config.Bind("General", "AnisotropicFiltering", true);
             renderTextureScaleFactor = Config.Bind("General", "RenderTextureScaleFactor", 2.0f);
             
             try
@@ -39,7 +42,7 @@ namespace KF3.GfxHook
 
         private void Update()
         {
-            if (Input.GetKey(KeyCode.LeftAlt) && Input.GetKeyDown(KeyCode.Return))
+            if (Input.GetKeyDown(KeyCode.Return) && (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)))
             {
                 if (!Screen.fullScreen)
                 {
@@ -57,15 +60,29 @@ namespace KF3.GfxHook
         private void Start()
         {
             dummyTexture = new RenderTexture(1280, 720, 0);
+            Application.targetFrameRate = targetFps.Value;
+            QualitySettings.vSyncCount = vsync.Value ? 1 : 0;
         }
 
-        [HarmonyPostfix]
-        [HarmonyPatch(typeof(SceneHome), nameof(SceneHome.OnCreateScene))]
-        public static void Hook_SceneHome_OnCreateScene()
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(UserOptionData), nameof(UserOptionData.SetFrameRate))]
+        public static bool Hook_SetFrameRate(UserOptionData __instance)
         {
             Application.targetFrameRate = targetFps.Value;
             QualitySettings.vSyncCount = vsync.Value ? 1 : 0;
+            return false;
+        }
+
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(UserOptionData), nameof(UserOptionData.SetDisplayQuality), typeof(int),
+            typeof(Vector2Int))]
+        public static bool Hook_UserOptionData_SetDisplayQuality(UserOptionData __instance, int qrty, Vector2Int siz)
+        {
             QualitySettings.SetQualityLevel(qualityLevel.Value, true);
+            QualitySettings.antiAliasing = antiAliasing.Value;
+            QualitySettings.anisotropicFiltering = 
+                anisotropicFiltering.Value ? AnisotropicFiltering.Enable : AnisotropicFiltering.Disable;
+            return false;
         }
 
         [HarmonyPrefix]
@@ -80,12 +97,9 @@ namespace KF3.GfxHook
         [HarmonyPatch(typeof(RenderTextureChara), nameof(RenderTextureChara.SetupRenderTexture))]
         public static void HookPost_RenderTextureChara_SetupRenderTexture(RenderTextureChara __instance)
         {
+            __instance.width = (int)(__instance.width / renderTextureScaleFactor.Value);
+            __instance.height = (int)(__instance.height / renderTextureScaleFactor.Value);
             var scl = 1.0f / renderTextureScaleFactor.Value;
-            var newComerObj = GameObject.Find("NewComer");
-            var heartLvUpObj = GameObject.Find("Auth_HeartLvUp");
-            if (newComerObj != null && newComerObj.activeSelf
-                || heartLvUpObj != null && heartLvUpObj.activeSelf)
-                scl /= renderTextureScaleFactor.Value;
             __instance.dispTexture.transform.localScale = new Vector3(scl, scl, scl);
         }
 
