@@ -11,7 +11,7 @@ namespace KF3.GfxHook
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
     public class Kf3GfxHookPlugin : BaseUnityPlugin
     {
-        private const float RENDER_TEXTURE_SCALE_FACTOR = 2.0f;
+        private static ConfigEntry<float> renderTextureScaleFactor;
         private static ConfigEntry<int> targetFps;
         private static ConfigEntry<bool> vsync;
         private static ConfigEntry<int> qualityLevel;
@@ -25,6 +25,7 @@ namespace KF3.GfxHook
             targetFps = Config.Bind("General", "FPSTarget", -1);
             vsync = Config.Bind("General", "VSync", true);
             qualityLevel = Config.Bind("General", "QualityLevel", 5);
+            renderTextureScaleFactor = Config.Bind("General", "RenderTextureScaleFactor", 2.0f);
             
             try
             {
@@ -71,18 +72,20 @@ namespace KF3.GfxHook
         [HarmonyPatch(typeof(RenderTextureChara), nameof(RenderTextureChara.SetupRenderTexture))]
         public static void HookPre_RenderTextureChara_SetupRenderTexture(ref int w, ref int h)
         {
-            w = (int)(w * RENDER_TEXTURE_SCALE_FACTOR);
-            h = (int)(h * RENDER_TEXTURE_SCALE_FACTOR);
+            w = (int)(w * renderTextureScaleFactor.Value);
+            h = (int)(h * renderTextureScaleFactor.Value);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(RenderTextureChara), nameof(RenderTextureChara.SetupRenderTexture))]
         public static void HookPost_RenderTextureChara_SetupRenderTexture(RenderTextureChara __instance)
         {
-            var scl = 1.0f / RENDER_TEXTURE_SCALE_FACTOR;
+            var scl = 1.0f / renderTextureScaleFactor.Value;
             var newComerObj = GameObject.Find("NewComer");
-            if (newComerObj != null && newComerObj.activeSelf)
-                scl /= RENDER_TEXTURE_SCALE_FACTOR;
+            var heartLvUpObj = GameObject.Find("Auth_HeartLvUp");
+            if (newComerObj != null && newComerObj.activeSelf
+                || heartLvUpObj != null && heartLvUpObj.activeSelf)
+                scl /= renderTextureScaleFactor.Value;
             __instance.dispTexture.transform.localScale = new Vector3(scl, scl, scl);
         }
 
@@ -91,8 +94,8 @@ namespace KF3.GfxHook
         public static void HookPre_RenderTextureChara_OnTouchTap(RenderTextureChara __instance)
         {
             oTexture = __instance.dispCamera.targetTexture;
-            dummyTexture.width = (int)(oTexture.width / RENDER_TEXTURE_SCALE_FACTOR);
-            dummyTexture.height = (int)(oTexture.height / RENDER_TEXTURE_SCALE_FACTOR);
+            dummyTexture.width = (int)(oTexture.width / renderTextureScaleFactor.Value);
+            dummyTexture.height = (int)(oTexture.height / renderTextureScaleFactor.Value);
             __instance.dispCamera.targetTexture = dummyTexture;
         }
         
